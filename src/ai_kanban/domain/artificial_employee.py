@@ -1,9 +1,9 @@
 """Artificial Employee aggregate root and related domain objects."""
 
 from typing import List, Dict, Optional, Any, TYPE_CHECKING
-from dataclasses import dataclass
-import logging
+from pydantic import BaseModel
 from datetime import datetime
+import logging
 
 from .events import (
     Event, NotionTask, TaskProcessedEvent, TaskProcessingFailedEvent,
@@ -14,22 +14,24 @@ from .repositories import MemoryRepository
 
 if TYPE_CHECKING:
     from ..workflows.employee_workflow import EmployeeWorkflowGraph
+else:
+    EmployeeWorkflowGraph = Any
 
 
-@dataclass
-class EmployeeReaction:
+class EmployeeReaction(BaseModel):
     """Represents a condition-action pair for an AI employee."""
+    model_config = {"arbitrary_types_allowed": True}
+    
     event_check: EventCheck
-    workflow_type: str  # Maps to LangGraph workflow
+    workflow: EmployeeWorkflowGraph  # Maps to LangGraph workflow
     priority: int = 0  # Higher priority reactions execute first
 
 
-@dataclass
-class TaskProcessingResult:
+class TaskProcessingResult(BaseModel):
     """Result of task processing by an AI employee."""
     task_id: str
     employee_id: str
-    workflow_type: str
+    workflow_name: str
     success: bool
     results: List[str]
     errors: List[str]
@@ -90,35 +92,19 @@ class ArtificialEmployee:
             return 0.0
         return self._success_count / self._tasks_processed
     
-    def activate(self) -> None:
-        """Business operation: Activate employee."""
-        if self._is_active:
-            raise ValueError(f"Employee {self.name} is already active")
-        
-        self._is_active = True
-        self._add_domain_event(EmployeeActivatedEvent(employee_id=self.employee_id))
-    
-    def deactivate(self) -> None:
-        """Business operation: Deactivate employee."""
-        if not self._is_active:
-            raise ValueError(f"Employee {self.name} is already inactive")
-        
-        self._is_active = False
-        self._add_domain_event(EmployeeDeactivatedEvent(employee_id=self.employee_id))
-    
-    def add_reaction(self, event_check: EventCheck, workflow_type: str, priority: int = 0) -> None:
+    def add_reaction(self, event_check: EventCheck, workflow: EmployeeWorkflowGraph, priority: int = 0) -> None:
         """Add a reaction pattern that maps to a LangGraph workflow."""
-        reaction = EmployeeReaction(event_check, workflow_type, priority)
+        reaction = EmployeeReaction(event_check=event_check, workflow=workflow, priority=priority)
         self._reactions.append(reaction)
         # Sort by priority (highest first)
         self._reactions.sort(key=lambda r: r.priority, reverse=True)
         
-        self.logger.debug(f"Added reaction: {workflow_type} with priority {priority}")
+        self.logger.debug(f"Added reaction: {workflow.workflow_name} with priority {priority}")
     
-    def add_workflow(self, workflow_type: str, workflow: 'EmployeeWorkflowGraph') -> None:
+    def add_workflow(self, workflow_name: str, workflow: 'EmployeeWorkflowGraph') -> None:
         """Register a LangGraph workflow for this employee."""
-        self._workflows[workflow_type] = workflow
-        self.logger.debug(f"Registered workflow: {workflow_type}")
+        self._workflows[workflow_name] = workflow
+        self.logger.debug(f"Registered workflow: {workflow_name}")
     
     def can_handle_task_type(self, task: NotionTask) -> bool:
         """Check if employee can handle this type of task (via EventCheck system)."""
@@ -141,12 +127,12 @@ class ArtificialEmployee:
         """Get the workflow that should handle this task."""
         for reaction in self._reactions:  # Already sorted by priority
             if reaction.event_check.matches(task, self):
-                workflow = self._workflows.get(reaction.workflow_type)
+                workflow = self._workflows.get(reaction.workflow.workflow_name)
                 if workflow:
-                    self.logger.debug(f"Selected workflow {reaction.workflow_type} for task {task.notion_id}")
+                    self.logger.debug(f"Selected workflow {reaction.workflow.workflow_name} for task {task.notion_id}")
                     return workflow
                 else:
-                    self.logger.warning(f"Workflow {reaction.workflow_type} not registered for employee {self.name}")
+                    self.logger.warning(f"Workflow {reaction.workflow.workflow_name} not registered for employee {self.name}")
         return None
     
     def get_available_workflow_types(self) -> List[str]:
@@ -169,7 +155,7 @@ class ArtificialEmployee:
         if not workflow:
             raise ValueError(f"No workflow available for task {task.notion_id}")
         
-        self.logger.info(f"Processing task {task.title} with workflow {workflow.workflow_type}")
+        self.logger.info(f"Processing task {task.title} with workflow {workflow.workflow_name}")
         
         start_time = datetime.utcnow()
         try:
@@ -188,7 +174,7 @@ class ArtificialEmployee:
             self._add_domain_event(TaskProcessedEvent(
                 employee_id=self.employee_id,
                 task_id=task.notion_id,
-                result_summary=f"Processed with {workflow.workflow_type}: {result.success}"
+                result_summary=f"Processed with {workflow.workflow_name}: {result.success}"
             ))
             
             self.logger.info(f"Successfully processed task {task.notion_id} in {execution_time:.2f}s")
@@ -212,7 +198,7 @@ class ArtificialEmployee:
             return TaskProcessingResult(
                 task_id=task.notion_id,
                 employee_id=self.employee_id,
-                workflow_type=workflow.workflow_type if workflow else "unknown",
+                workflow_name=workflow.workflow_name if workflow else "unknown",
                 success=False,
                 results=[],
                 errors=[error_msg],

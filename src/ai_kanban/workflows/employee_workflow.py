@@ -32,10 +32,10 @@ class WorkflowState(TypedDict):
 class EmployeeWorkflowGraph:
     """LangGraph-based workflow for specific employee task types."""
     
-    def __init__(self, workflow_type: str, memory_repository: MemoryRepository):
-        self.workflow_type = workflow_type
+    def __init__(self, workflow_name: str, memory_repository: MemoryRepository):
+        self.workflow_name = workflow_name
         self.memory_repository = memory_repository
-        self.logger = logging.getLogger(f"workflow.{workflow_type}")
+        self.logger = logging.getLogger(f"workflow.{workflow_name}")
         
         # Initialize LLM
         self.llm = ChatAnthropic(
@@ -59,11 +59,11 @@ class EmployeeWorkflowGraph:
         workflow.add_node("finalize_result", self._finalize_result)
         
         # Workflow-specific nodes and edges
-        if self.workflow_type == "specification":
+        if self.workflow_name == "specification":
             self._add_specification_workflow(workflow)
-        elif self.workflow_type == "research":
+        elif self.workflow_name == "research":
             self._add_research_workflow(workflow)
-        elif self.workflow_type == "documentation":
+        elif self.workflow_name == "documentation":
             self._add_documentation_workflow(workflow)
         else:
             self._add_default_workflow(workflow)
@@ -185,7 +185,7 @@ class EmployeeWorkflowGraph:
             return TaskProcessingResult(
                 task_id=task.notion_id,
                 employee_id=employee.employee_id,
-                workflow_type=self.workflow_type,
+                workflow_name=self.workflow_name,
                 success=len(final_state["errors"]) == 0 and bool(final_response),
                 results=[final_response] if final_response else [],
                 errors=final_state["errors"],
@@ -200,7 +200,7 @@ class EmployeeWorkflowGraph:
             return TaskProcessingResult(
                 task_id=task.notion_id,
                 employee_id=employee.employee_id,
-                workflow_type=self.workflow_type,
+                workflow_name=self.workflow_name,
                 success=False,
                 results=[],
                 errors=[str(e)],
@@ -281,14 +281,14 @@ class EmployeeWorkflowGraph:
         try:
             if state["results"]:
                 result = state["results"][-1]
-                memory_text = f"Processed task '{task.title}' with {self.workflow_type} workflow. Result: {result[:200]}..."
+                memory_text = f"Processed task '{task.title}' with {self.workflow_name} workflow. Result: {result[:200]}..."
                 
                 await self.memory_repository.store_memory(
                     employee.name,
                     memory_text,
                     {
                         "task_id": task.notion_id,
-                        "workflow_type": self.workflow_type,
+                        "workflow_name": self.workflow_name,
                         "timestamp": datetime.utcnow().isoformat()
                     }
                 )
@@ -422,13 +422,13 @@ These are relevant memories from your previous work:
         
         # Add workflow-specific context
         context_section = ""
-        if self.workflow_type == "research" and context.get("research_scope"):
+        if self.workflow_name == "research" and context.get("research_scope"):
             context_section = f"""
 ## Research Scope
 Focus on these specific questions/topics:
 {chr(10).join(f"- {scope}" for scope in context["research_scope"])}
 """
-        elif self.workflow_type == "documentation" and context.get("code_blocks"):
+        elif self.workflow_name == "documentation" and context.get("code_blocks"):
             context_section = f"""
 ## Code Analysis
 Found {len(context["code_blocks"])} code blocks to document.
@@ -452,7 +452,7 @@ Provide your response:"""
     
     def _get_action_prompt_for_workflow(self) -> str:
         """Get workflow-specific action instructions."""
-        if self.workflow_type == "specification":
+        if self.workflow_name == "specification":
             return """
 Create a detailed technical specification including:
 - Clear problem statement and objectives
@@ -465,7 +465,7 @@ Create a detailed technical specification including:
 
 Format your response as a structured document with clear sections.
 """
-        elif self.workflow_type == "research":
+        elif self.workflow_name == "research":
             return """
 Conduct thorough research and provide:
 - Executive summary of key findings
@@ -478,7 +478,7 @@ Conduct thorough research and provide:
 
 Be comprehensive but focus on actionable insights.
 """
-        elif self.workflow_type == "documentation":
+        elif self.workflow_name == "documentation":
             return """
 Create comprehensive technical documentation including:
 - Clear overview of what the code does

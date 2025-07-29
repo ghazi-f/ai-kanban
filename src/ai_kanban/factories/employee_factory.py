@@ -44,13 +44,12 @@ You always provide structured, comprehensive specifications that teams can execu
                 ]),
                 ContentLengthCheck(20)  # Ensure sufficient content
             ], "AND"),
-            workflow_type="specification",
+            workflow=EmployeeWorkflowGraph("specification", self.memory_repository),
             priority=10
         )
         
         # Create and add workflow
-        spec_workflow = EmployeeWorkflowGraph("specification", self.memory_repository)
-        employee.add_workflow("specification", spec_workflow)
+        employee.add_workflow("specification", EmployeeWorkflowGraph("specification", self.memory_repository))
         
         self.logger.info(f"Created EngineeringManager employee: {employee.employee_id}")
         return employee
@@ -77,13 +76,12 @@ You always provide comprehensive research with multiple perspectives and evidenc
                 AssignmentCheck(),
                 ContentLengthCheck(15)
             ], "AND"),
-            workflow_type="research",
+            workflow=EmployeeWorkflowGraph("research", self.memory_repository),
             priority=10
         )
         
         # Create and add workflow
-        research_workflow = EmployeeWorkflowGraph("research", self.memory_repository)
-        employee.add_workflow("research", research_workflow)
+        employee.add_workflow("research", EmployeeWorkflowGraph("research", self.memory_repository))
         
         self.logger.info(f"Created ResearchAgent employee: {employee.employee_id}")
         return employee
@@ -114,13 +112,12 @@ When appropriate, you suggest where visual diagrams would enhance understanding.
                 ]),
                 ContentLengthCheck(10)
             ], "AND"),
-            workflow_type="documentation",
+            workflow=EmployeeWorkflowGraph("documentation", self.memory_repository),
             priority=10
         )
         
         # Create and add workflow
-        doc_workflow = EmployeeWorkflowGraph("documentation", self.memory_repository)
-        employee.add_workflow("documentation", doc_workflow)
+        employee.add_workflow("documentation", EmployeeWorkflowGraph("documentation", self.memory_repository))
         
         self.logger.info(f"Created DocSpecialist employee: {employee.employee_id}")
         return employee
