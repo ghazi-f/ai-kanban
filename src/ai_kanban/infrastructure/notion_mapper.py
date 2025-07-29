@@ -37,6 +37,7 @@ class NotionTaskMapper:
         assigned_to = cls._extract_person_property(properties, "assign")
         created_by = cls._extract_person_property(properties, "created by")
         github_url = cls._extract_url_property(properties, "Github")
+        ai_processed = cls._extract_checkbox_property(properties, "ai processed")
         
         # Extract page content if available
         content = cls._extract_page_content(notion_data)
@@ -53,7 +54,8 @@ class NotionTaskMapper:
             github_url=github_url,
             notion_url=notion_url,
             last_edited_time=last_edited_time,
-            created_time=created_time
+            created_time=created_time,
+            ai_processed=ai_processed
         )
     
     @classmethod
@@ -141,6 +143,14 @@ class NotionTaskMapper:
         return None
     
     @classmethod
+    def _extract_checkbox_property(cls, properties: Dict[str, Any], prop_name: str) -> bool:
+        """Extract checkbox property."""
+        prop = properties.get(prop_name, {})
+        if prop.get("type") == "checkbox":
+            return prop.get("checkbox", False)
+        return False
+    
+    @classmethod
     def _extract_page_content(cls, notion_data: Dict[str, Any]) -> str:
         """Extract page content if available in the response."""
         # In the current implementation, we don't get page content in the query response
@@ -174,6 +184,15 @@ class NotionTaskMapper:
                 "status": {
                     "name": new_status
                 }
+            }
+        }
+    
+    @classmethod
+    def create_ai_processed_update_payload(cls, processed: bool) -> Dict[str, Any]:
+        """Create payload for updating ai processed checkbox."""
+        return {
+            "ai processed": {
+                "checkbox": processed
             }
         }
     

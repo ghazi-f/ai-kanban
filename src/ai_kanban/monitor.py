@@ -5,7 +5,6 @@ from dotenv import load_dotenv
 
 from ai_kanban.infrastructure.repositories import NotionTaskRepository
 from ai_kanban.infrastructure.rabbitmq_client import RabbitMQPublisher
-from ai_kanban.infrastructure.task_tracker import TaskTracker
 
 load_dotenv()
 
@@ -14,7 +13,6 @@ class TaskMonitorService:
         self.poll_interval = poll_interval
         self.notion_client = NotionTaskRepository()
         self.rabbitmq_publisher = RabbitMQPublisher()
-        self.task_tracker = TaskTracker()
         self.running = False
 
     def setup_signal_handlers(self):
@@ -67,33 +65,24 @@ class TaskMonitorService:
                 print("No tasks found in Notion database")
                 return
 
-            # Use full task data from Notion
-            processed_tasks = all_tasks
-
-            # Filter out already processed tasks
-            new_tasks = self.task_tracker.get_new_tasks(processed_tasks)
-
-            if new_tasks:
-                # Filter to only tasks where AI Employee is assigned AND status is processable
-                ai_tasks = []
-                for task in new_tasks:
-                    has_ai_employee = self._has_ai_employee_assigned(task)
-                    status_is_processable = self._is_status_processable(task)
-                    if has_ai_employee and status_is_processable:
-                        ai_tasks.append(task)
+            # Filter to only tasks that haven't been AI processed and are ready for processing
+            ai_tasks = []
+            for task in all_tasks:
+                has_ai_employee = self._has_ai_employee_assigned(task)
+                status_is_processable = self._is_status_processable(task)
+                not_ai_processed = not self._is_ai_processed(task)
                 
-                if ai_tasks:
-                    print(f"Found {len(ai_tasks)} new AI tasks (out of {len(new_tasks)} total new tasks)")
-                    for task in ai_tasks:
-                        # Publish to RabbitMQ
-                        self.rabbitmq_publisher.publish_task(task)
-
-                        # Mark as processed
-                        self.task_tracker.mark_task_processed(task["id"])
-                else:
-                    print(f"Found {len(new_tasks)} new tasks, but none are ready for AI processing (need AI Employee assigned + processable status)")
+                if has_ai_employee and status_is_processable and not_ai_processed:
+                    ai_tasks.append(task)
+            
+            if ai_tasks:
+                print(f"Found {len(ai_tasks)} tasks ready for AI processing")
+                for task in ai_tasks:
+                    # Publish to RabbitMQ
+                    self.rabbitmq_publisher.publish_task(task)
+                    print(f"Published task: {task.get('properties', {}).get('Title', {}).get('title', [{}])[0].get('text', {}).get('content', 'Unknown')}")
             else:
-                print("No new tasks to process")
+                print("No tasks ready for AI processing (need AI Employee assigned, processable status, and not yet AI processed)")
 
         except Exception as e:
             print(f"Error checking for new tasks: {e}")
@@ -143,6 +132,16 @@ class TaskMonitorService:
             return status_name.lower() in processable_statuses
         except Exception:
             return False
+    
+    def _is_ai_processed(self, task: dict) -> bool:
+        """Check if the task has already been processed by AI."""
+        try:
+            ai_processed_property = task.get("properties", {}).get("ai processed", {})
+            if ai_processed_property.get("type") == "checkbox":
+                return ai_processed_property.get("checkbox", False)
+            return False
+        except Exception:
+            return False
 
 
 def main():
@@ -158,19 +157,10 @@ def main():
         default=60,
         help="Polling interval in seconds (default: 60)",
     )
-    parser.add_argument(
-        "--clear-history",
-        action="store_true",
-        help="Clear processed task history before starting",
-    )
 
     args = parser.parse_args()
 
     monitor = TaskMonitorService(poll_interval=args.interval)
-
-    if args.clear_history:
-        monitor.task_tracker.clear_processed_tasks()
-
     monitor.start_monitoring()
 
 

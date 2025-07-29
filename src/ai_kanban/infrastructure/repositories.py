@@ -287,6 +287,27 @@ class NotionTaskRepository(TaskRepository):
             self.logger.error(f"Failed to update task status for {task_id}: {e}")
             return False
     
+    async def update_ai_processed(self, task_id: str, processed: bool = True) -> bool:
+        """Update the ai processed checkbox in Notion."""
+        try:
+            from .notion_mapper import NotionTaskMapper
+            payload = NotionTaskMapper.create_ai_processed_update_payload(processed)
+            
+            loop = asyncio.get_event_loop()
+            await loop.run_in_executor(
+                None,
+                lambda: self.notion_client.client.pages.update(
+                    page_id=task_id,
+                    properties=payload
+                )
+            )
+            self.logger.info(f"Updated ai processed to {processed} for task {task_id}")
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"Failed to update ai processed for {task_id}: {e}")
+            return False
+    
     async def post_comment_to_task(self, task_id: str, comment_content: List[Dict[str, Any]]) -> bool:
         """Post a comment to a task in Notion."""
         try:

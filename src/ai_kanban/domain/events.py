@@ -44,6 +44,7 @@ class NotionTask(Event):
     notion_url: str = ""
     last_edited_time: Optional[datetime] = None
     created_time: Optional[datetime] = None
+    ai_processed: bool = False  # Tracks if task has been processed by AI
     
     # Event properties (inherited)
     event_id: UUID = field(default_factory=uuid4)
@@ -90,6 +91,7 @@ class NotionTask(Event):
             "notion_url": self.notion_url,
             "last_edited_time": self.last_edited_time.isoformat() if self.last_edited_time else None,
             "created_time": self.created_time.isoformat() if self.created_time else None,
+            "ai_processed": self.ai_processed,
             "metadata": self.metadata
         }
     

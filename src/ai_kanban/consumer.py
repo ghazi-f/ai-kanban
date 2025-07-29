@@ -148,6 +148,9 @@ class TaskConsumer:
                             # Update status to "Done"
                             await self.status_service.transition_to_done(task)
                             
+                            # Mark as AI processed
+                            await self.task_repository.update_ai_processed(task.notion_id, True)
+                            
                             self.logger.info(f"Successfully processed task {task.title} with {assigned_employee.name}")
                         else:
                             # Handle failure
